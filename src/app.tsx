@@ -12,6 +12,8 @@ import {
 } from './fit/engine';
 import { arMeasure, arMeasureSupported } from './ar/measure';
 import { buildBoxModel, loadViewer } from './ar/preview';
+import { itemWarnings, segmentWarnings, type Warning } from './fit/sanity';
+import { Guide } from './guides';
 
 declare module 'preact' {
   namespace JSX {
@@ -145,6 +147,8 @@ function initialState(): Saved {
 
 function NumberField(props: {
   label: string;
+  letter?: string;
+  warn?: boolean;
   unit?: string;
   value: number | null;
   onChange: (v: number | null) => void;
@@ -152,8 +156,8 @@ function NumberField(props: {
 }) {
   return (
     <label class="field">
-      <span>{props.label}</span>
-      <div class="input">
+      <span>{props.letter && <b class="letter">{props.letter}</b>}{props.label}</span>
+      <div class={props.warn ? 'input warn' : 'input'}>
         <input
           type="number"
           inputMode="decimal"
@@ -176,6 +180,20 @@ function NumberField(props: {
         )}
       </div>
     </label>
+  );
+}
+
+function Warnings({ list, onFix }: { list: Warning[]; onFix: (key: string, value: number) => void }) {
+  if (!list.length) return null;
+  return (
+    <ul class="warnings">
+      {list.map((w) => (
+        <li>
+          <span>{w.text}</span>
+          {w.fix && <button type="button" onClick={() => onFix(w.key, w.fix!.value)}>{w.fix.label}</button>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -339,6 +357,9 @@ export function App() {
     });
 
   const dims = itemDims(item);
+  const itemWarn = useMemo(() => itemWarnings(item), [item]);
+  const routeWarn = useMemo(() => route.map(segmentWarnings), [route]);
+  const flaggedSteps = routeWarn.map((w, i) => (w.length ? i + 1 : 0)).filter(Boolean);
   const verdict = useMemo(() => checkRoute(item, route), [item, route]);
   const worstSeg = verdict.worst >= 0 ? route[verdict.worst] : null;
   const worstRes = verdict.worst >= 0 ? verdict.results[verdict.worst] : null;
@@ -363,10 +384,11 @@ export function App() {
           </div>
         </label>
         <div class="grid3">
-          <NumberField label="Width" value={item.w} onChange={(w) => setItem({ w })} />
-          <NumberField label="Depth" value={item.d} onChange={(d) => setItem({ d })} />
-          <NumberField label="Height" value={item.h} onChange={(h) => setItem({ h })} />
+          <NumberField label="Width" value={item.w} warn={itemWarn.some((w) => w.key === 'w')} onChange={(w) => setItem({ w })} />
+          <NumberField label="Depth" value={item.d} warn={itemWarn.some((w) => w.key === 'd')} onChange={(d) => setItem({ d })} />
+          <NumberField label="Height" value={item.h} warn={itemWarn.some((w) => w.key === 'h')} onChange={(h) => setItem({ h })} />
         </div>
+        <Warnings list={itemWarn} onFix={(key, value) => setItem({ [key]: value })} />
         <div class="chips">
           {PRESETS.map((p) => (
             <button type="button" class="chip" onClick={() => setItem({ name: p.name, w: p.dims[0], d: p.dims[1], h: p.dims[2] })}>
@@ -406,10 +428,13 @@ export function App() {
                 </div>
               </div>
               <p class="tip">{def.tip}</p>
+              <Guide kind={seg.kind} />
               <div class={def.fields.length > 3 ? 'grid3 many' : 'grid3'}>
-                {def.fields.map((f) => (
+                {def.fields.map((f, fi) => (
                   <NumberField
                     label={f.label}
+                    letter={'ABCDE'[fi]}
+                    warn={routeWarn[i].some((w) => w.key === f.key)}
                     unit={f.unit}
                     value={seg.v[f.key]}
                     onChange={(v) => setValue(seg.id, f.key, v)}
@@ -424,6 +449,7 @@ export function App() {
                   />
                 ))}
               </div>
+              <Warnings list={routeWarn[i]} onFix={(key, value) => setValue(seg.id, key, value)} />
               {res.status !== 'incomplete' && (
                 <div class="result">
                   <div class="result-text">
@@ -477,6 +503,13 @@ export function App() {
             {verdict.status === 'tight' && <p>Re-measure that spot with a tape measure before ordering; less than 5 cm leaves little room for hands and packaging.</p>}
             {verdict.incomplete > 0 && <p>{verdict.incomplete} step{verdict.incomplete > 1 ? 's' : ''} still need measurements and {verdict.incomplete > 1 ? "aren't" : "isn't"} included yet.</p>}
           </>
+        )}
+        {dims && (flaggedSteps.length > 0 || itemWarn.length > 0) && (
+          <p class="caution">
+            Some measurements look unusual
+            {flaggedSteps.length > 0 ? ` (step ${flaggedSteps.join(', ')})` : ' (your item)'}. Check them before relying
+            on this result.
+          </p>
         )}
         <p class="small">
           Guidance only. The item is checked as a solid block at the sizes you enter, so results depend on accurate

@@ -173,3 +173,36 @@ button:disabled { opacity: 0.45; cursor: default; }
 .ar-actions { display: flex; gap: 10px; padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); pointer-events: auto; }
 .ar-actions button { flex: 1; padding: 14px; border-radius: 12px; border: 0; font-weight: 600; background: rgba(255, 255, 255, 0.92); color: #1f2a24; }
 .ar-actions button.primary { background: #f2b84b; }
+
+/* measuring guides */
+.guide { display: block; width: 100%; height: auto; max-height: 190px; border-radius: 10px; margin: 0 0 14px; background: #f6f2ea; border: 1px solid var(--line); }
+.g-wall { fill: #ddd4c1; }
+.g-open { fill: #fffdf9; }
+.g-edge, .g-line { stroke: var(--ink); stroke-width: 1.5; }
+.g-open.g-edge { stroke-width: 2.5; }
+.g-obj { fill: #b7a88c; stroke: var(--ink); stroke-width: 1; }
+.g-tread { stroke: #b7a88c; stroke-width: 1.2; }
+.g-gap { stroke: #fffdf9; stroke-width: 4; }
+.g-path { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.g-arrow { fill: var(--muted); }
+.g-note { font: 10px system-ui, sans-serif; fill: var(--muted); }
+.g-dim line { stroke: var(--accent); stroke-width: 2; }
+.g-dim circle { fill: var(--accent); }
+.g-dim text { fill: #fff; font: 700 10.5px system-ui, sans-serif; text-anchor: middle; }
+.letter {
+  display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 700; margin-right: 5px; vertical-align: 1px;
+}
+
+/* sanity-check warnings */
+.input.warn { border-color: var(--tight); background: var(--tight-bg); }
+.warnings { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.warnings li {
+  background: var(--tight-bg); border: 1px solid #ecd28f; color: #5f4200; border-radius: 10px;
+  padding: 10px 12px; font-size: 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between;
+}
+.warnings button {
+  flex: none; border: 1px solid var(--tight); background: #fff; color: #5f4200;
+  border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.caution { background: rgba(255, 255, 255, 0.16); border-radius: 10px; padding: 10px 12px; margin-top: 12px !important; }

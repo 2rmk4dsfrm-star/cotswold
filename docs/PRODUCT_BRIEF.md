@@ -30,6 +30,11 @@ Let a customer find out, before they buy, whether an item can be carried from th
 2. **Route.** The customer adds each tight spot in order: doorway, hallway, corner turn, straight stairs, stair turn / landing, lift. Each has two to five measurements and a one-line tip on how to measure it properly.
 3. **Verdict.** Every step gets *Fits*, *Tight* (under 5 cm to spare) or *Won't fit*, the clearance in cm, how the item has to be carried to get through, and a small diagram of the item at the tightest point. The overall verdict is the worst step, named.
 
+### Guarding against wrong measurements
+
+- **Measuring pictures.** Every step shows a labelled picture of exactly where to measure; the letters on the picture match the letters on the boxes underneath.
+- **Sanity checks.** Numbers that look like the wrong unit (inches, millimetres, metres), swapped width and height, or an implausible size are flagged in amber, with a one-tap correction where the intended value is clear. Flags never block the verdict, but the verdict says which steps to re-check.
+
 ### Where the camera comes in
 
 | Feature | Android (Chrome) | iPhone (Safari) |
