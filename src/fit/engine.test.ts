@@ -43,7 +43,7 @@ describe('route checks', () => {
     // With enough ceiling height it can be stood on end and walked round.
     const high = checkSegment(sofa, seg('corner', { widthIn: 100, widthOut: 100, height: 240 }));
     expect(high.status).not.toBe('no');
-    expect(high.how).toMatch(/on one end|tipped/);
+    expect(high.how).toMatch(/on its side|tipped/);
   });
 
   it('respects keep-upright items', () => {
@@ -52,12 +52,23 @@ describe('route checks', () => {
     expect(checkSegment({ ...cabinet, keepUpright: false }, seg('door', { width: 90, height: 198 })).status).toBe('fits');
   });
 
-  it('uses perpendicular headroom on stairs', () => {
-    const wardrobe: Item = { name: 'Wardrobe', w: 120, d: 60, h: 200, keepUpright: false };
-    const ok = checkSegment(wardrobe, seg('stairs', { width: 85, headroom: 200, pitch: 40 }));
-    expect(ok.status).toBe('fits');
-    const low = checkSegment(wardrobe, seg('stairs', { width: 85, headroom: 70, pitch: 40 }));
-    expect(low.status).toBe('no');
+  it('sends close calls to a person instead of deciding them', () => {
+    expect(checkSegment(sofa, seg('door', { width: 88, height: 200 })).status).toBe('check'); // 3 cm spare
+    expect(checkSegment(sofa, seg('door', { width: 84, height: 200 })).status).toBe('check'); // 1 cm over
+    expect(checkSegment(sofa, seg('door', { width: 82, height: 200 })).status).toBe('no');
+  });
+
+  it('checks that a tall item can be stood up in the room', () => {
+    const wardrobe: Item = { name: 'Wardrobe', w: 120, d: 60, h: 220, keepUpright: false };
+    // Diagonal of 220 x 60 is 228 cm.
+    expect(checkSegment(wardrobe, seg('room', { height: 240 })).status).toBe('fits');
+    expect(checkSegment(wardrobe, seg('room', { height: 226 })).status).toBe('check');
+    expect(checkSegment(wardrobe, seg('room', { height: 222 })).status).toBe('no');
+    // Too tall to tip up, but a tall enough doorway lets it stay upright all the way.
+    const upright = checkRoute(wardrobe, [seg('door', { width: 90, height: 230 }), seg('room', { height: 224 })]);
+    expect(upright.results[1].status).toBe('check');
+    const blocked = checkRoute(wardrobe, [seg('door', { width: 90, height: 200 }), seg('room', { height: 224 })]);
+    expect(blocked.results[1].status).toBe('no');
   });
 
   it('checks both lift door and car', () => {

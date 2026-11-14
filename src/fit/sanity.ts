@@ -21,6 +21,16 @@ interface Range {
 const CEILING: Range = { min: 190, max: 400, what: 'ceiling height' };
 const PASSAGE = (what: string): Range => ({ min: 60, max: 300, what });
 
+const STAIRS: Record<string, Range> = {
+  width: { min: 55, max: 150, what: 'stair width' },
+  headroom: { min: 150, max: 350, what: 'stair headroom' },
+  footSpace: { min: 60, max: 1000, what: 'space at the foot of the stairs' },
+  footCeil: CEILING,
+  topSpace: { min: 60, max: 1000, what: 'space at the top of the stairs' },
+  topCeil: CEILING,
+};
+const LAND_CEILING: Range = { min: 190, max: 700, what: 'ceiling height above a landing' };
+
 export const RANGES: Record<SegmentKind, Record<string, Range>> = {
   door: {
     width: { min: 55, max: 130, what: 'doorway width' },
@@ -28,11 +38,15 @@ export const RANGES: Record<SegmentKind, Record<string, Range>> = {
   },
   hall: { width: PASSAGE('hallway width'), height: CEILING },
   corner: { widthIn: PASSAGE('passage width'), widthOut: PASSAGE('passage width'), height: CEILING },
-  landing: { widthIn: PASSAGE('landing width'), widthOut: PASSAGE('landing width'), height: CEILING },
-  stairs: {
-    width: { min: 55, max: 150, what: 'stair width' },
-    headroom: { min: 150, max: 350, what: 'stair headroom' },
+  stairsStraight: STAIRS,
+  stairsQuarter: { ...STAIRS, landDepth: { min: 55, max: 150, what: 'stair width' }, landCeil: LAND_CEILING },
+  stairsHalf: {
+    ...STAIRS,
+    landDepth: { min: 60, max: 300, what: 'landing depth' },
+    landWidth: { min: 120, max: 400, what: 'landing width' },
+    landCeil: LAND_CEILING,
   },
+  room: { height: CEILING },
   lift: {
     doorWidth: { min: 60, max: 200, what: 'lift door width' },
     doorHeight: { min: 180, max: 250, what: 'lift door height' },
@@ -78,12 +92,22 @@ export function segmentWarnings(seg: Segment): Warning[] {
       out.push({ key: hk, text: 'The width is bigger than the height — are they the wrong way round?' });
     }
   }
-  if (seg.kind === 'stairs') {
+  if (seg.kind.startsWith('stairs')) {
     if (has('pitch') && ((v.pitch as number) < 25 || (v.pitch as number) > 50)) {
       out.push({ key: 'pitch', text: `${v.pitch}° is unusual — most home stairs are between 35° and 42°. Leave it at 40° if you are not sure.`, fix: { value: 40, label: 'Use 40°' } });
     }
     if (has('headroom') && !flagged('headroom') && (v.headroom as number) > 260) {
       out.push({ key: 'headroom', text: 'That is a lot of headroom. Check you measured straight up from the edge of a step to the lowest ceiling or beam above the stairs, not the full height of the stairwell.' });
+    }
+    for (const key of ['steps', 'steps2']) {
+      if (!has(key)) continue;
+      const n = v[key] as number;
+      if (n > 20 || n < 2 || n !== Math.round(n)) {
+        out.push({ key, text: `${n} steps looks wrong — count the steps in this flight, including the one level with the floor above. Most flights have between 3 and 16.` });
+      }
+    }
+    if (seg.kind === 'stairsHalf' && has('landWidth') && has('width') && !flagged('landWidth') && (v.landWidth as number) < 2 * (v.width as number)) {
+      out.push({ key: 'landWidth', text: 'The landing is narrower than two flights side by side. Measure it wall to wall, across both flights.' });
     }
   }
   return out;

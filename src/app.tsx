@@ -5,6 +5,7 @@ import {
   type Diagram,
   type Dims,
   type Item,
+  type RouteResult,
   type Segment,
   type SegmentKind,
   type SegmentResult,
@@ -28,78 +29,110 @@ declare module 'preact' {
 interface FieldDef {
   key: string;
   label: string;
+  /** Marker on the measuring picture. */
+  letter?: string;
   unit?: string;
   fallback?: number;
+  /** A two-way choice instead of a measurement; stored as 1 or 2. */
+  choice?: [string, string];
+  /** Starts a new titled group of fields. */
+  group?: string;
 }
+
+const STAIRS_TOP: FieldDef[] = [
+  { group: 'The stairs', key: 'width', label: 'Width', letter: 'A' },
+  { key: 'headroom', label: 'Lowest headroom', letter: 'B' },
+  { key: 'pitch', label: 'Steepness', letter: 'C', unit: '°', fallback: 40 },
+];
+const STAIRS_ENDS: FieldDef[] = [
+  { key: 'above', label: 'What is above the stairs?', choice: ['Open to the upstairs ceiling', 'A sloping ceiling'] },
+  { group: 'Bottom of the stairs', key: 'foot', label: 'How do you reach the bottom step?', choice: ['Straight on', 'From the side'] },
+  { key: 'footSpace', label: 'Clear floor before bottom step', letter: 'D' },
+  { key: 'footCeil', label: 'Ceiling height', letter: 'E' },
+  { group: 'Top of the stairs', key: 'top', label: 'What happens at the top?', choice: ['Carry straight on', 'Turn left or right'] },
+  { key: 'topSpace', label: 'Clear floor beyond top step', letter: 'F' },
+  { key: 'topCeil', label: 'Ceiling height', letter: 'G' },
+];
+const STAIR_TIP =
+  'Width is wall to handrail. Headroom is from the front edge of a step straight up to the lowest ceiling or beam. Count every step, including the one level with the floor you arrive on.';
 
 const KINDS: Record<SegmentKind, { title: string; tip: string; fields: FieldDef[] }> = {
   door: {
     title: 'Doorway',
     tip: 'Open the door fully and measure the narrowest clear gap — door edge to the stop on the frame, not frame to frame.',
     fields: [
-      { key: 'width', label: 'Clear width' },
-      { key: 'height', label: 'Clear height' },
+      { key: 'width', label: 'Clear width', letter: 'A' },
+      { key: 'height', label: 'Clear height', letter: 'B' },
     ],
   },
   hall: {
     title: 'Hallway',
     tip: 'Measure at the narrowest point, allowing for radiators, shelves, light fittings and banisters.',
     fields: [
-      { key: 'width', label: 'Narrowest width' },
-      { key: 'height', label: 'Lowest ceiling height' },
+      { key: 'width', label: 'Narrowest width', letter: 'A' },
+      { key: 'height', label: 'Lowest ceiling height', letter: 'B' },
     ],
   },
   corner: {
     title: 'Corner turn',
-    tip: 'Any 90° turn — including a door that opens onto a facing wall. Measure the passage width on each side of the turn.',
+    tip: 'Any 90° turn on a level floor — including a door that opens onto a facing wall. Measure the passage width on each side of the turn.',
     fields: [
-      { key: 'widthIn', label: 'Width before turn' },
-      { key: 'widthOut', label: 'Width after turn' },
-      { key: 'height', label: 'Ceiling height' },
+      { key: 'widthIn', label: 'Width before turn', letter: 'A' },
+      { key: 'widthOut', label: 'Width after turn', letter: 'B' },
+      { key: 'height', label: 'Ceiling height', letter: 'C' },
     ],
   },
-  stairs: {
+  stairsStraight: {
     title: 'Straight stairs',
-    tip: 'Width is wall to handrail. Headroom is from the front edge of a step straight up to the lowest ceiling or beam above it.',
+    tip: STAIR_TIP,
+    fields: [...STAIRS_TOP, { key: 'steps', label: 'Number of steps', unit: 'steps' }, ...STAIRS_ENDS],
+  },
+  stairsQuarter: {
+    title: 'Stairs with a quarter-turn landing',
+    tip: `An L-shaped staircase that turns 90° across a flat landing. ${STAIR_TIP}`,
     fields: [
-      { key: 'width', label: 'Clear width' },
-      { key: 'headroom', label: 'Headroom' },
-      { key: 'pitch', label: 'Steepness', unit: '°', fallback: 40 },
+      ...STAIRS_TOP,
+      { key: 'steps', label: 'Steps up to the landing', unit: 'steps' },
+      { key: 'steps2', label: 'Steps after the landing', unit: 'steps' },
+      ...STAIRS_ENDS,
+      { group: 'The landing', key: 'landDepth', label: 'Width of second flight', letter: 'H' },
+      { key: 'landCeil', label: 'Ceiling height above landing', letter: 'I' },
     ],
   },
-  landing: {
-    title: 'Stair turn / landing',
-    tip: 'Where the stairs change direction or meet a landing. Measure the clear floor width arriving and leaving, wall to banister.',
+  stairsHalf: {
+    title: 'Stairs with a half-turn landing',
+    tip: `A U-shaped staircase that doubles back across a flat landing. ${STAIR_TIP}`,
     fields: [
-      { key: 'widthIn', label: 'Width arriving' },
-      { key: 'widthOut', label: 'Width leaving' },
-      { key: 'height', label: 'Ceiling height' },
+      ...STAIRS_TOP,
+      { key: 'steps', label: 'Steps up to the landing', unit: 'steps' },
+      { key: 'steps2', label: 'Steps after the landing', unit: 'steps' },
+      ...STAIRS_ENDS,
+      { group: 'The landing', key: 'landDepth', label: 'Landing depth', letter: 'H' },
+      { key: 'landWidth', label: 'Landing width', letter: 'I' },
+      { key: 'landCeil', label: 'Ceiling height above landing', letter: 'J' },
     ],
   },
   lift: {
     title: 'Lift',
     tip: 'Measure the door opening and the inside of the lift car, below any handrail.',
     fields: [
-      { key: 'doorWidth', label: 'Door width' },
-      { key: 'doorHeight', label: 'Door height' },
-      { key: 'carWidth', label: 'Inside width' },
-      { key: 'carDepth', label: 'Inside depth' },
-      { key: 'carHeight', label: 'Inside height' },
+      { key: 'doorWidth', label: 'Door width', letter: 'A' },
+      { key: 'doorHeight', label: 'Door height', letter: 'B' },
+      { key: 'carWidth', label: 'Inside width', letter: 'C' },
+      { key: 'carDepth', label: 'Inside depth', letter: 'D' },
+      { key: 'carHeight', label: 'Inside height', letter: 'E' },
     ],
+  },
+  room: {
+    title: 'The room it is going in',
+    tip: 'A tall item carried in lying down has to be tipped upright, which needs more height than the item itself. Measure the ceiling at its lowest point.',
+    fields: [{ key: 'height', label: 'Ceiling height', letter: 'A' }],
   },
 };
 
-const PRESETS: { name: string; dims: Dims }[] = [
-  { name: '3-seater sofa', dims: [220, 95, 85] },
-  { name: 'Wardrobe', dims: [120, 60, 200] },
-  { name: 'Dining table', dims: [200, 100, 76] },
-  { name: 'Sideboard', dims: [180, 45, 85] },
-  { name: 'King bed frame', dims: [165, 215, 110] },
-];
-
 const STATUS_TEXT: Record<Status, string> = {
   fits: 'Fits',
-  tight: 'Tight',
+  check: 'Needs checking',
   no: "Won't fit",
   incomplete: 'Needs measurements',
 };
@@ -113,12 +146,17 @@ const newSegment = (kind: SegmentKind): Segment => {
 
 /* ---------- persistence and catalogue hand-off ---------- */
 
-const STORE_KEY = 'will-it-fit:v1';
+const STORE_KEY = 'will-it-fit:v2';
 
 interface Saved {
   item: Item;
   route: Segment[];
 }
+
+const blank = (): Saved => ({
+  item: { name: '', w: null, d: null, h: null, keepUpright: false, sections: false },
+  route: [newSegment('door')],
+});
 
 function initialState(): Saved {
   let saved: Saved | null = null;
@@ -127,18 +165,17 @@ function initialState(): Saved {
   } catch {
     /* storage unavailable or corrupt: start fresh */
   }
-  const state: Saved = saved?.item && Array.isArray(saved.route)
-    ? saved
-    : { item: { name: '', w: null, d: null, h: null, keepUpright: false }, route: [newSegment('door')] };
+  const ok = saved?.item && Array.isArray(saved.route) && saved.route.every((s) => s.kind in KINDS);
+  const state: Saved = ok ? saved! : blank();
 
-  // A product page can deep-link with ?name=&w=&d=&h=&upright=1 (cm) to prefill the item.
+  // A product page can deep-link with ?name=&w=&d=&h= (cm) to prefill the item.
   const q = new URLSearchParams(location.search);
   const num = (k: string) => {
     const n = parseFloat(q.get(k) ?? '');
     return Number.isFinite(n) && n > 0 ? n : null;
   };
   if (num('w') && num('d') && num('h')) {
-    state.item = { name: q.get('name') ?? '', w: num('w'), d: num('d'), h: num('h'), keepUpright: q.get('upright') === '1' };
+    state.item = { name: q.get('name') ?? '', w: num('w'), d: num('d'), h: num('h'), keepUpright: false, sections: q.get('sections') === '1' };
   }
   return state;
 }
@@ -162,7 +199,7 @@ function NumberField(props: {
           type="number"
           inputMode="decimal"
           min="0"
-          step="0.5"
+          step={props.unit === 'steps' ? '1' : '0.5'}
           value={props.value ?? ''}
           onInput={(e) => {
             const n = parseFloat((e.target as HTMLInputElement).value);
@@ -180,6 +217,21 @@ function NumberField(props: {
         )}
       </div>
     </label>
+  );
+}
+
+function ChoiceField(props: { label: string; options: [string, string]; value: number | null; onChange: (v: number) => void }) {
+  return (
+    <fieldset class="choice">
+      <legend>{props.label}</legend>
+      <div>
+        {props.options.map((text, i) => (
+          <button type="button" class={props.value === i + 1 ? 'on' : ''} aria-pressed={props.value === i + 1} onClick={() => props.onChange(i + 1)}>
+            {text}
+          </button>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -202,10 +254,27 @@ function Badge({ status }: { status: Status }) {
 }
 
 function clearanceText(r: SegmentResult): string {
+  if (r.summary) return r.summary;
   const c = Math.abs(r.clearance);
-  if (r.status === 'no') return `About ${c} cm too big`;
+  if (r.clearance < 0) return `About ${c} cm too big`;
+  if (r.status === 'check') return `Only about ${c} cm to spare`;
   if (r.clearance >= 100) return 'Plenty of room';
   return `About ${c} cm to spare`;
+}
+
+function Stages({ list }: { list: NonNullable<SegmentResult['stages']> }) {
+  return (
+    <ol class="stages">
+      {list.map((s) => (
+        <li class={s.state}>
+          <i aria-hidden="true">{s.state === 'ok' ? '✓' : s.state === 'stuck' ? '✕' : '–'}</i>
+          {s.label}
+          {s.state === 'stuck' && <span> — stuck here</span>}
+          {s.state === 'pending' && <span> — not reached</span>}
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function DiagramView({ d, status }: { d: Diagram; status: Status }) {
@@ -310,13 +379,11 @@ function ArPreview({ item, onClose }: { item: Item; onClose: () => void }) {
           </model-viewer>
         )}
       </div>
-      {!item.keepUpright && (
-        <div class="chips center">
-          {['Right way up', 'On one end', 'On its back'].map((t, i) => (
-            <button type="button" class={pose === i ? 'chip on' : 'chip'} onClick={() => setPose(i)}>{t}</button>
-          ))}
-        </div>
-      )}
+      <div class="chips center">
+        {['Right way up', 'On its side', 'On its back'].map((t, i) => (
+          <button type="button" class={pose === i ? 'chip on' : 'chip'} onClick={() => setPose(i)}>{t}</button>
+        ))}
+      </div>
       <ol class="note steps">
         <li>Stand 2–3 m back from where the item will go and tap <b>View in my space</b>.</li>
         <li>Point the phone at the floor there and move it slowly side to side. The block floats close to you at first, then drops onto the floor once your phone has found it.</li>
@@ -331,13 +398,56 @@ function ArPreview({ item, onClose }: { item: Item; onClose: () => void }) {
   );
 }
 
+const HEADLINE: Record<Exclude<Status, 'incomplete'>, string> = {
+  fits: 'It should fit.',
+  check: 'Too close to call — it needs checking.',
+  no: "It won't fit along this route.",
+};
+
+function Summary(props: { item: Item; route: Segment[]; verdict: RouteResult; onClose: () => void }) {
+  const { item, route, verdict } = props;
+  return (
+    <div class="modal summary" role="dialog" aria-label="Summary">
+      <div class="modal-head">
+        <div>
+          <strong>Delivery route summary</strong>
+          <span>{item.name || 'Item'} · {item.w} × {item.d} × {item.h} cm{item.sections ? ' (largest section)' : ''}</span>
+        </div>
+        <button type="button" class="ghost" onClick={props.onClose}>Close</button>
+      </div>
+      <div class="summary-body">
+        {verdict.status !== 'incomplete' && <p class={`summary-verdict ${verdict.status}`}>{HEADLINE[verdict.status]}</p>}
+        <ol class="summary-list">
+          {route.map((seg, i) => {
+            const r = verdict.results[i];
+            return (
+              <li class={r.status}>
+                <div>
+                  <strong>{i + 1}. {KINDS[seg.kind].title}</strong>
+                  <Badge status={r.status} />
+                </div>
+                {r.status !== 'incomplete' && (
+                  <p>{clearanceText(r)}. {r.status === 'no' && !r.stages ? `Closest attempt: ${r.how}` : r.how}</p>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        <p class="small-print">Guidance only, based on the measurements entered. The item is checked as a solid block, carried in as delivered.</p>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- app ---------- */
 
 export function App() {
   const [{ item, route }, setState] = useState<Saved>(initialState);
   const [canMeasure, setCanMeasure] = useState(false);
   const [showAr, setShowAr] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     arMeasureSupported().then(setCanMeasure);
@@ -370,6 +480,51 @@ export function App() {
   const worstSeg = verdict.worst >= 0 ? route[verdict.worst] : null;
   const worstRes = verdict.worst >= 0 ? verdict.results[verdict.worst] : null;
 
+  const renderFields = (seg: Segment, i: number) => {
+    const def = KINDS[seg.kind];
+    const blocks: any[] = [];
+    let numbers: FieldDef[] = [];
+    const flush = () => {
+      if (!numbers.length) return;
+      const batch = numbers;
+      numbers = [];
+      blocks.push(
+        <div class={batch.length === 2 ? 'grid3 two' : batch.length > 3 ? 'grid3 many' : 'grid3'}>
+          {batch.map((f) => (
+            <NumberField
+              label={f.label}
+              letter={f.letter}
+              unit={f.unit}
+              warn={routeWarn[i].some((w) => w.key === f.key)}
+              value={seg.v[f.key]}
+              onChange={(v) => setValue(seg.id, f.key, v)}
+              onMeasure={
+                canMeasure && !f.unit
+                  ? async () => {
+                      const cm = await arMeasure(`${def.title}: ${f.label.toLowerCase()}`);
+                      if (cm !== null) setValue(seg.id, f.key, cm);
+                    }
+                  : undefined
+              }
+            />
+          ))}
+        </div>,
+      );
+    };
+    for (const f of def.fields) {
+      if (f.group) {
+        flush();
+        blocks.push(<h4>{f.group}</h4>);
+      }
+      if (f.choice) {
+        flush();
+        blocks.push(<ChoiceField label={f.label} options={f.choice} value={seg.v[f.key]} onChange={(v) => setValue(seg.id, f.key, v)} />);
+      } else numbers.push(f);
+    }
+    flush();
+    return blocks;
+  };
+
   return (
     <main>
       <header class="hero">
@@ -386,7 +541,7 @@ export function App() {
         <label class="field wide">
           <span>Product name</span>
           <div class="input">
-            <input type="text" value={item.name} placeholder="e.g. Three-seater sofa" onInput={(e) => setItem({ name: (e.target as HTMLInputElement).value })} />
+            <input type="text" value={item.name} placeholder="e.g. Double wardrobe" onInput={(e) => setItem({ name: (e.target as HTMLInputElement).value })} />
           </div>
         </label>
         <div class="grid3">
@@ -395,16 +550,12 @@ export function App() {
           <NumberField label="Height" value={item.h} warn={itemWarn.some((w) => w.key === 'h')} onChange={(h) => setItem({ h })} />
         </div>
         <Warnings list={itemWarn} onFix={(key, value) => setItem({ [key]: value })} />
-        <div class="chips">
-          {PRESETS.map((p) => (
-            <button type="button" class="chip" onClick={() => setItem({ name: p.name, w: p.dims[0], d: p.dims[1], h: p.dims[2] })}>
-              {p.name}
-            </button>
-          ))}
-        </div>
-        <label class="check">
-          <input type="checkbox" checked={item.keepUpright} onChange={(e) => setItem({ keepUpright: (e.target as HTMLInputElement).checked })} />
-          <span>Must stay upright <small>Can't be turned on its side or end (glass, stone tops, fitted contents)</small></span>
+        <label class="tick">
+          <input type="checkbox" checked={!!item.sections} onChange={(e) => setItem({ sections: (e.target as HTMLInputElement).checked })} />
+          <span>
+            Arrives in sections
+            <small>{item.sections ? 'Enter the size of the largest section above — that is the piece that has to get through.' : 'Tick this if it is delivered in two or more pieces and joined in the room.'}</small>
+          </span>
         </label>
         <button type="button" class="secondary" disabled={!dims} onClick={() => setShowAr(true)}>
           See it at true size in your space
@@ -417,7 +568,7 @@ export function App() {
           Add each tight spot in order, starting at the front door.
           {canMeasure
             ? ' Type measurements in, or tap the camera icon to measure with your phone.'
-            : ' Use a tape measure (or the Measure app on an iPhone) and type the numbers in.'}
+            : ' Use a tape measure and type the numbers in, in centimetres.'}
         </p>
 
         {route.map((seg, i) => {
@@ -435,32 +586,14 @@ export function App() {
               </div>
               <p class="tip">{def.tip}</p>
               <Guide kind={seg.kind} />
-              <div class={def.fields.length > 3 ? 'grid3 many' : 'grid3'}>
-                {def.fields.map((f, fi) => (
-                  <NumberField
-                    label={f.label}
-                    letter={'ABCDE'[fi]}
-                    warn={routeWarn[i].some((w) => w.key === f.key)}
-                    unit={f.unit}
-                    value={seg.v[f.key]}
-                    onChange={(v) => setValue(seg.id, f.key, v)}
-                    onMeasure={
-                      canMeasure && !f.unit
-                        ? async () => {
-                            const cm = await arMeasure(`${def.title}: ${f.label.toLowerCase()}`);
-                            if (cm !== null) setValue(seg.id, f.key, cm);
-                          }
-                        : undefined
-                    }
-                  />
-                ))}
-              </div>
+              {renderFields(seg, i)}
               <Warnings list={routeWarn[i]} onFix={(key, value) => setValue(seg.id, key, value)} />
               {res.status !== 'incomplete' && (
                 <div class="result">
                   <div class="result-text">
                     <p><Badge status={res.status} /> <strong>{clearanceText(res)}</strong></p>
-                    <p class="how">{res.status === 'no' ? `Closest attempt: ${res.how}` : res.how}</p>
+                    {res.stages && <Stages list={res.stages} />}
+                    <p class="how">{res.status === 'no' && !res.stages && seg.kind !== 'room' ? `Closest attempt: ${res.how}` : res.how}</p>
                   </div>
                   {res.diagram && <DiagramView d={res.diagram} status={res.status} />}
                 </div>
@@ -496,18 +629,18 @@ export function App() {
         <h2><i>3</i> Verdict</h2>
         {!dims && <p class="big">Enter your item's width, depth and height to begin.</p>}
         {dims && verdict.status === 'incomplete' && <p class="big">Add measurements for at least one step on the route.</p>}
-        {dims && worstSeg && worstRes && (
+        {dims && worstSeg && worstRes && verdict.status !== 'incomplete' && (
           <>
-            <p class="big">
-              {verdict.status === 'fits' && 'It should fit.'}
-              {verdict.status === 'tight' && 'It should fit — but it will be tight.'}
-              {verdict.status === 'no' && "It won't fit along this route."}
-            </p>
+            <p class="big">{HEADLINE[verdict.status]}</p>
             <p>
-              {verdict.status === 'no' ? 'Problem spot' : 'Tightest spot'}: <b>step {verdict.worst + 1}, {KINDS[worstSeg.kind].title.toLowerCase()}</b> — {clearanceText(worstRes).toLowerCase()}.
+              {verdict.status === 'no' ? 'Problem spot' : verdict.status === 'check' ? 'Closest spot' : 'Tightest spot'}:{' '}
+              <b>step {verdict.worst + 1}, {KINDS[worstSeg.kind].title.toLowerCase()}</b> — {clearanceText(worstRes).toLowerCase()}.
             </p>
-            {verdict.status === 'tight' && <p>Re-measure that spot with a tape measure before ordering; less than 5 cm leaves little room for hands and packaging.</p>}
+            {verdict.status === 'check' && (
+              <p>Please ask the delivery team to check this before you order. A centimetre either way in the measurements could change the answer.</p>
+            )}
             {verdict.incomplete > 0 && <p>{verdict.incomplete} step{verdict.incomplete > 1 ? 's' : ''} still need measurements and {verdict.incomplete > 1 ? "aren't" : "isn't"} included yet.</p>}
+            <button type="button" class="on-colour" onClick={() => setShowSummary(true)}>Show summary</button>
           </>
         )}
         {dims && (flaggedSteps.length > 0 || itemWarn.length > 0) && (
@@ -518,12 +651,36 @@ export function App() {
           </p>
         )}
         <p class="small">
-          Guidance only. The item is checked as a solid block at the sizes you enter, so results depend on accurate
-          measurements and on every tight spot being added to the route.
+          Guidance only. The item is checked as a solid block, carried in as delivered, at the sizes you enter — so
+          results depend on accurate measurements and on every tight spot being added to the route.
         </p>
       </section>
 
+      <div class="reset">
+        {confirmReset ? (
+          <>
+            <span>Clear the item and the whole route?</span>
+            <button type="button" class="ghost" onClick={() => setConfirmReset(false)}>Keep it</button>
+            <button
+              type="button"
+              class="danger"
+              onClick={() => {
+                setState(blank());
+                setConfirmReset(false);
+                setAdding(false);
+                window.scrollTo({ top: 0 });
+              }}
+            >
+              Yes, start again
+            </button>
+          </>
+        ) : (
+          <button type="button" class="ghost" onClick={() => setConfirmReset(true)}>Start again</button>
+        )}
+      </div>
+
       {showAr && dims && <ArPreview item={item} onClose={() => setShowAr(false)} />}
+      {showSummary && <Summary item={item} route={route} verdict={verdict} onClose={() => setShowSummary(false)} />}
     </main>
   );
 }

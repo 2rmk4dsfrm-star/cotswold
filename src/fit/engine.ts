@@ -8,6 +8,8 @@
  * how much bigger (+) or smaller (-) the item could be and still just pass.
  */
 
+import { buildStairs, searchPath, type SearchResult, type StageTag, type StairParams } from './stairs';
+
 export type Dims = [w: number, d: number, h: number];
 
 export interface Item {
@@ -17,9 +19,11 @@ export interface Item {
   h: number | null;
   /** Item cannot be turned on its side, end or back (e.g. glass, stone tops). */
   keepUpright: boolean;
+  /** Delivered in sections: the dimensions are those of the largest section. */
+  sections?: boolean;
 }
 
-export type SegmentKind = 'door' | 'hall' | 'corner' | 'stairs' | 'landing' | 'lift';
+export type SegmentKind = 'door' | 'hall' | 'corner' | 'stairsStraight' | 'stairsQuarter' | 'stairsHalf' | 'lift' | 'room';
 
 export interface Segment {
   id: string;
@@ -27,7 +31,7 @@ export interface Segment {
   v: Record<string, number | null>;
 }
 
-export type Status = 'fits' | 'tight' | 'no' | 'incomplete';
+export type Status = 'fits' | 'check' | 'no' | 'incomplete';
 
 export type Diagram =
   | { type: 'opening'; W: number; H: number; p: number; q: number; roll: number; caption: string }
@@ -39,10 +43,25 @@ export interface SegmentResult {
   clearance: number;
   how: string;
   diagram?: Diagram;
+  /** Replaces the "about N cm to spare" line where a single number would mislead (stairs, rooms). */
+  summary?: string;
+  /** Stages of a staircase, in order, and how far the item gets. */
+  stages?: { label: string; state: 'ok' | 'stuck' | 'pending' }[];
 }
 
-/** Below this much spare room a pass is reported as "tight". */
-export const TIGHT_MARGIN_CM = 5;
+/**
+ * Close calls are not decided by the tool: anything from slightly too big to
+ * only just clearing is reported as "needs checking" for a person to look at.
+ */
+export const CHECK_OVER_CM = 5;
+export const CHECK_UNDER_CM = 2;
+/** Stairs are modelled more approximately, so their "needs checking" band is wider. */
+export const STAIR_CHECK_OVER_CM = 8;
+export const STAIR_CHECK_UNDER_CM = 3;
+
+export function statusFor(clearance: number): Status {
+  return clearance < -CHECK_UNDER_CM ? 'no' : clearance < CHECK_OVER_CM ? 'check' : 'fits';
+}
 
 const RAD = Math.PI / 180;
 const EPS = 1e-6;
@@ -121,7 +140,7 @@ function orientations(upright: boolean): Orientation[] {
   return upright ? ALL.filter((o) => o.up === 2) : ALL;
 }
 
-const UP_TEXT = ['stood on one end (width pointing up)', 'laid on its back (depth pointing up)', 'the right way up'];
+const UP_TEXT = ['on its side (width pointing up)', 'laid on its back (depth pointing up)', 'the right way up'];
 const LEAD_TEXT = ['with its left or right end leading', 'with its front or back leading', 'with its top or bottom leading'];
 
 function describe(o: Orientation): string {
@@ -183,7 +202,7 @@ function solve(dims: Dims, upright: boolean, pred: Pred): Solved {
 
 function toResult(dims: Dims, s: Solved, extra = ''): SegmentResult {
   const clearance = Math.round(s.clearance * 2) / 2;
-  const status: Status = s.clearance < 0 ? 'no' : s.clearance < TIGHT_MARGIN_CM ? 'tight' : 'fits';
+  const status = statusFor(s.clearance);
   if (!s.config) return { status: 'no', clearance, how: 'No way of carrying it gets through here.' };
   const how = `${describe(s.config.o)}${s.config.note ? `, ${s.config.note}` : ''}.${extra}`;
   return { status, clearance, how, diagram: s.config.diagram?.(dims) };
@@ -240,27 +259,6 @@ function cornerPred(a: number, b: number, H: number, upright: boolean): Pred {
   };
 }
 
-function stairsPred(W: number, headroom: number, pitch: number, upright: boolean): Pred {
-  const caption = 'Looking up the stairs';
-  if (upright) {
-    // Item stays vertical, so its trailing top corner rises as it spans the slope.
-    const t = Math.tan(pitch * RAD);
-    return (d, o) => {
-      const need = d[o.up] + d[o.travel] * t;
-      if (d[o.across] > W + EPS || need > headroom + EPS) return null;
-      return {
-        effort: 0,
-        note: 'kept vertical',
-        diagram: (real) => ({
-          type: 'opening', W, H: headroom, p: real[o.across], q: real[o.up] + real[o.travel] * t, roll: 0, caption,
-        }),
-      };
-    };
-  }
-  // Carried parallel to the slope: the usable height is measured square to the stairs.
-  return openingPred(W, headroom * Math.cos(pitch * RAD), false, caption);
-}
-
 function liftCarPred(carW: number, carD: number, carH: number, upright: boolean): Pred {
   return (d, o) => {
     const L = d[o.travel];
@@ -281,12 +279,16 @@ function liftCarPred(carW: number, carD: number, carH: number, upright: boolean)
 
 /* ---------- public API ---------- */
 
+const STAIR_COMMON = ['width', 'headroom', 'pitch', 'above', 'foot', 'footSpace', 'footCeil', 'top', 'topSpace', 'topCeil'];
+
 export const REQUIRED: Record<SegmentKind, string[]> = {
   door: ['width', 'height'],
   hall: ['width', 'height'],
   corner: ['widthIn', 'widthOut', 'height'],
-  landing: ['widthIn', 'widthOut', 'height'],
-  stairs: ['width', 'headroom', 'pitch'],
+  stairsStraight: [...STAIR_COMMON, 'steps'],
+  stairsQuarter: [...STAIR_COMMON, 'steps', 'steps2', 'landDepth', 'landCeil'],
+  stairsHalf: [...STAIR_COMMON, 'steps', 'steps2', 'landDepth', 'landWidth', 'landCeil'],
+  room: ['height'],
   lift: ['doorWidth', 'doorHeight', 'carWidth', 'carDepth', 'carHeight'],
 };
 
@@ -296,23 +298,132 @@ export function itemDims(item: Item): Dims | null {
   return [w, d, h];
 }
 
+const STAGE_LABEL: Record<StageTag, string> = {
+  foot: 'Getting onto the stairs',
+  flight: 'Up the stairs',
+  landing: 'Turning on the landing',
+  top: 'Getting off at the top',
+};
+
+function checkStairs(dims: Dims, upright: boolean, seg: Segment): SegmentResult {
+  const v = seg.v as Record<string, number>;
+  const kind = seg.kind === 'stairsStraight' ? 'straight' : seg.kind === 'stairsQuarter' ? 'quarter' : 'half';
+  const layout = buildStairs({ ...(v as unknown as StairParams), kind });
+  const narrowest = Math.min(v.width, kind === 'quarter' ? v.landDepth : v.width);
+  // Longest edge leading is the natural carry, so try those first.
+  const carries = orientations(upright).sort((p, q) => dims[q.travel] - dims[p.travel]);
+
+  let blocked: StageTag = 'foot';
+  let blockedRank = -1;
+  const order: StageTag[] = ['foot', 'flight', 'landing', 'top'];
+  const attempt = (g: number): { o: Orientation; res: SearchResult } | null => {
+    for (const o of carries) {
+      const L = dims[o.travel] + g;
+      const Wd = dims[o.across] + g;
+      const T = dims[o.up] + g;
+      if (L <= 0 || Wd <= 0 || T <= 0) continue;
+      // Too wide for the stairs: no need to simulate.
+      if (Wd > narrowest) continue;
+      const steps = layout.route(L, Wd, T);
+      const res = searchPath(layout.scene, steps, L, Wd, T, upright);
+      if (res.ok) {
+        // Prefer a way that never stands the item on end, so that advice is only given when it is needed.
+        const gentle = upright ? res : searchPath(layout.scene, steps, L, Wd, T, false, 45);
+        return { o, res: gentle.ok ? gentle : res };
+      }
+      const rank = order.indexOf(res.blockedAt!);
+      if (rank > blockedRank) {
+        blockedRank = rank;
+        blocked = res.blockedAt!;
+      }
+    }
+    return null;
+  };
+
+  const present = order.filter((t) => t !== 'landing' || kind !== 'straight');
+  const stagesFor = (stuck?: StageTag) =>
+    present.map((t) => ({
+      label: STAGE_LABEL[t],
+      state: !stuck ? ('ok' as const) : order.indexOf(t) < order.indexOf(stuck) ? ('ok' as const) : t === stuck ? ('stuck' as const) : ('pending' as const),
+    }));
+  const tiltNote = (res: SearchResult): string => {
+    const notes: string[] = [];
+    if ((res.maxTilt.foot ?? 0) >= 60) notes.push('stand it up on end at the foot of the stairs and lean it onto them');
+    if ((res.maxTilt.landing ?? 0) >= 60) notes.push('stand it up on end to turn on the landing');
+    if ((res.maxTilt.top ?? 0) >= 60) notes.push('stand it up on end to turn at the top');
+    return notes.length ? ` You will need to ${notes.join(', and ')}.` : '';
+  };
+
+  const roomy = attempt(STAIR_CHECK_OVER_CM);
+  if (roomy) {
+    return {
+      status: 'fits', clearance: STAIR_CHECK_OVER_CM, summary: 'Goes up with room to spare',
+      how: `${describe(roomy.o)}.${tiltNote(roomy.res)}`, stages: stagesFor(),
+    };
+  }
+  const close = attempt(0) ?? attempt(-STAIR_CHECK_UNDER_CM);
+  if (close) {
+    return {
+      status: 'check', clearance: 0, summary: 'Too close to call on these measurements',
+      how: `${describe(close.o)}.${tiltNote(close.res)} Any error in the measurements could decide it either way.`,
+      stages: stagesFor(),
+    };
+  }
+  blockedRank = -1;
+  attempt(-STAIR_CHECK_UNDER_CM);
+  const stuck: StageTag = blockedRank < 0 ? 'flight' : blocked;
+  const over = attempt(-10) ? 10 : attempt(-20) ? 20 : 30;
+  return {
+    status: 'no', clearance: -over,
+    summary: over === 30 ? 'Much too big for these stairs' : `Roughly ${over} cm too big`,
+    how: blockedRank < 0
+      ? 'It is too wide or too deep to lie on the stairs at all.'
+      : `It gets stuck ${STAGE_LABEL[stuck].toLowerCase()}, whichever way it is carried.`,
+    stages: stagesFor(stuck),
+  };
+}
+
+const cache = new Map<string, SegmentResult>();
+
 export function checkSegment(item: Item, seg: Segment): SegmentResult {
   const dims = itemDims(item);
   const v = seg.v;
   const complete = REQUIRED[seg.kind].every((k) => typeof v[k] === 'number' && (v[k] as number) > 0);
   if (!dims || !complete) return { status: 'incomplete', clearance: 0, how: '' };
-  const n = (k: string) => v[k] as number;
-  const up = item.keepUpright;
+  // Stair searches are the expensive part, so remember answers while the customer edits other steps.
+  const key = JSON.stringify([dims, item.keepUpright, seg.kind, v]);
+  let res = cache.get(key);
+  if (!res) {
+    res = compute(dims, item.keepUpright, seg);
+    if (cache.size > 200) cache.clear();
+    cache.set(key, res);
+  }
+  return res;
+}
 
+function compute(dims: Dims, up: boolean, seg: Segment): SegmentResult {
+  const n = (k: string) => seg.v[k] as number;
   switch (seg.kind) {
     case 'door':
     case 'hall':
       return toResult(dims, solve(dims, up, openingPred(n('width'), n('height'), up, 'Looking straight through the opening')));
     case 'corner':
-    case 'landing':
       return toResult(dims, solve(dims, up, cornerPred(n('widthIn'), n('widthOut'), n('height'), up)));
-    case 'stairs':
-      return toResult(dims, solve(dims, up, stairsPred(n('width'), n('headroom'), n('pitch'), up)));
+    case 'stairsStraight':
+    case 'stairsQuarter':
+    case 'stairsHalf':
+      return checkStairs(dims, up, seg);
+    case 'room': {
+      // Tipping a box upright sweeps its diagonal under the ceiling.
+      const clearance = Math.round((n('height') - Math.hypot(dims[2], Math.min(dims[0], dims[1]))) * 2) / 2;
+      const status = statusFor(clearance);
+      return {
+        status, clearance,
+        how: status === 'no'
+          ? 'Lying on its back it is too long on the diagonal to be tipped upright under this ceiling.'
+          : 'It can be carried in on its back and tipped upright in the room.',
+      };
+    }
     case 'lift': {
       const door = solve(dims, up, openingPred(n('doorWidth'), n('doorHeight'), up, 'Looking through the lift door'));
       const car = solve(dims, up, liftCarPred(n('carWidth'), n('carDepth'), n('carHeight'), up));
@@ -334,6 +445,32 @@ export interface RouteResult {
 
 export function checkRoute(item: Item, route: Segment[]): RouteResult {
   const results = route.map((s) => checkSegment(item, s));
+  // An item too tall to tip up in the room can still be delivered if it stays upright the whole way.
+  const dims = itemDims(item);
+  route.forEach((seg, i) => {
+    const r = results[i];
+    if (seg.kind !== 'room' || r.status !== 'no' || !dims) return;
+    const ceiling = seg.v.height as number;
+    const standing = statusFor(ceiling - dims[2]);
+    if (standing === 'no') {
+      results[i] = { ...r, how: 'It is taller than this ceiling.' };
+      return;
+    }
+    const uprightItem = { ...item, keepUpright: true };
+    const before = route.slice(0, i).filter((s) => s.kind !== 'room').map((s) => checkSegment(uprightItem, s));
+    const done = before.filter((b) => b.status !== 'incomplete');
+    if (done.some((b) => b.status === 'no')) {
+      results[i] = { ...r, how: 'It cannot be tipped upright under this ceiling, and it cannot be carried upright all the way along this route.' };
+      return;
+    }
+    const close = standing === 'check' || done.some((b) => b.status === 'check');
+    results[i] = {
+      status: close ? 'check' : 'fits',
+      clearance: close ? 0 : CHECK_OVER_CM,
+      summary: close ? 'Only if it stays upright, and that is close' : 'Fits if it stays upright all the way',
+      how: 'It cannot be tipped upright under this ceiling, so it must be carried standing up from the front door. The route allows that.',
+    };
+  });
   let worst = -1;
   results.forEach((r, i) => {
     if (r.status === 'incomplete') return;

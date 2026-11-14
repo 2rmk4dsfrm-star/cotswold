@@ -31,6 +31,32 @@ const Frame = ({ label, children }: { label: string; children: ComponentChildren
   </svg>
 );
 
+/** Side view shared by every staircase shape. Letters match the first seven measurements. */
+function StairSide() {
+  return (
+    <Frame label="Stairs seen from the side: B is the lowest headroom straight up from a step edge, C the steepness, D the clear floor in front of the bottom step, E the ceiling height at the bottom, F the clear floor beyond the top step, G the ceiling height at the top. Inset: A is the width from wall to handrail">
+      <rect class="g-open" x="0" y="0" width="300" height="150" />
+      <polygon class="g-wall g-edge" points="14,150 14,138 96,138 96,126 112,126 112,114 128,114 128,102 144,102 144,90 160,90 160,78 176,78 176,66 192,66 192,54 250,54 250,150" />
+      <rect class="g-wall g-edge" x="4" y="14" width="10" height="136" />
+      <rect class="g-wall g-edge" x="250" y="4" width="10" height="146" />
+      <rect class="g-wall g-edge" x="14" y="54" width="110" height="14" />
+      <rect class="g-wall g-edge" x="14" y="4" width="236" height="8" />
+      <path class="g-path" d="M110 138 A16 16 0 0 0 106 128" />
+      <g class="g-dim"><circle cx="124" cy="137" r="8" /><text x="124" y="140.6">C</text></g>
+      <Dim a={[14, 128]} b={[96, 128]} l="D" />
+      <Dim a={[38, 68]} b={[38, 138]} l="E" />
+      <Dim a={[120, 68]} b={[120, 114]} l="B" />
+      <Dim a={[192, 46]} b={[250, 46]} l="F" />
+      <Dim a={[243, 12]} b={[243, 54]} l="G" />
+      <line class="g-line" x1="266" y1="92" x2="266" y2="146" />
+      <line class="g-line" x1="294" y1="112" x2="294" y2="146" />
+      <circle class="g-obj" cx="294" cy="109" r="3" />
+      <text class="g-note" x="280" y="84" text-anchor="middle">width</text>
+      <Dim a={[266, 130]} b={[292, 130]} l="A" />
+    </Frame>
+  );
+}
+
 const GUIDES: Record<SegmentKind, () => any> = {
   door: () => (
     <Frame label="Doorway seen from the front: A is the clear gap between the open door and the frame stop, B is floor to the top of the opening">
@@ -70,34 +96,60 @@ const GUIDES: Record<SegmentKind, () => any> = {
       <Dim a={[140, 112]} b={[205, 112]} l="B" />
     </Frame>
   ),
-  landing: () => (
-    <Frame label="Stair landing seen from above: A is the clear width where the stairs arrive, B is the clear width where they leave, C is floor to ceiling above the landing">
-      <rect class="g-wall" x="0" y="0" width="300" height="150" />
-      <polygon class="g-open" points="20,28 205,28 205,150 140,150 140,84 20,84" />
-      {[34, 48, 62, 76, 90, 104, 118].map((x) => <line class="g-tread" x1={x} y1="28" x2={x} y2="84" />)}
-      {[102, 114, 126, 138].map((y) => <line class="g-tread" x1="140" y1={y} x2="205" y2={y} />)}
-      <text class="g-note" x="20" y="20">seen from above</text>
-      <text class="g-note" x="174" y="60" text-anchor="middle">landing</text>
-      <text class="g-note" x="215" y="62">C = floor to</text>
-      <text class="g-note" x="215" y="75">ceiling here</text>
-      <Dim a={[128, 28]} b={[128, 84]} l="A" />
-      <Dim a={[140, 93]} b={[205, 93]} l="B" />
-    </Frame>
+  stairsStraight: () => <StairSide />,
+  stairsQuarter: () => (
+    <>
+      <StairSide />
+      <Frame label="Quarter-turn stairs seen from above: A is the width of the first flight, H is the width of the second flight, I is floor to ceiling above the landing">
+        <rect class="g-wall" x="0" y="0" width="300" height="150" />
+        <polygon class="g-open" points="20,64 140,64 140,8 205,8 205,120 20,120" />
+        {[34, 48, 62, 76, 90, 104, 118].map((x) => <line class="g-tread" x1={x} y1="64" x2={x} y2="120" />)}
+        {[52, 40, 28, 16].map((y) => <line class="g-tread" x1="140" y1={y} x2="205" y2={y} />)}
+        <text class="g-note" x="20" y="56">first flight</text>
+        <text class="g-note" x="172" y="96" text-anchor="middle">landing</text>
+        <text class="g-note" x="215" y="30">second flight</text>
+        <text class="g-note" x="215" y="88">I = floor to ceiling</text>
+        <text class="g-note" x="215" y="101">above the landing</text>
+        <Dim a={[90, 64]} b={[90, 120]} l="A" />
+        <Dim a={[140, 34]} b={[205, 34]} l="H" />
+      </Frame>
+    </>
   ),
-  stairs: () => (
-    <Frame label="Stairs seen from the side: B is headroom, straight up from the edge of a step to the lowest ceiling above it, C is the steepness. Inset: A is the width from wall to handrail">
-      <rect class="g-open" x="0" y="0" width="300" height="150" />
-      <polygon class="g-wall g-edge" points="20,140 20,129 42,129 42,118 64,118 64,107 86,107 86,96 108,96 108,85 130,85 130,74 152,74 152,63 174,63 174,52 200,52 200,140" />
-      <rect class="g-wall g-edge" x="0" y="8" width="140" height="14" />
-      <text class="g-note" x="6" y="34">ceiling / floor above</text>
-      <path class="g-path" d="M48 140 A28 28 0 0 0 42 126" />
-      <g class="g-dim"><circle cx="62" cy="131" r="9" /><text x="62" y="134.6">C</text></g>
-      <Dim a={[132, 22]} b={[132, 74]} l="B" />
-      <line class="g-line" x1="222" y1="62" x2="222" y2="140" />
-      <line class="g-line" x1="286" y1="88" x2="286" y2="140" />
-      <circle class="g-obj" cx="286" cy="85" r="4" />
-      <text class="g-note" x="254" y="54" text-anchor="middle">wall to handrail</text>
-      <Dim a={[222, 112]} b={[282, 112]} l="A" />
+  stairsHalf: () => (
+    <>
+      <StairSide />
+      <Frame label="Half-turn stairs seen from above: A is the width of a flight, H is the depth of the landing, I is the width of the landing across both flights, J is floor to ceiling above the landing">
+        <rect class="g-wall" x="0" y="0" width="300" height="150" />
+        <rect class="g-open" x="30" y="88" width="140" height="44" />
+        <rect class="g-open" x="30" y="22" width="140" height="44" />
+        <rect class="g-open" x="170" y="22" width="56" height="110" />
+        {[44, 58, 72, 86, 100, 114, 128, 142, 156].map((x) => (
+          <>
+            <line class="g-tread" x1={x} y1="88" x2={x} y2="132" />
+            <line class="g-tread" x1={x} y1="22" x2={x} y2="66" />
+          </>
+        ))}
+        <text class="g-note" x="34" y="144">first flight</text>
+        <text class="g-note" x="34" y="14">second flight</text>
+        <text class="g-note" x="236" y="60">J = floor to</text>
+        <text class="g-note" x="236" y="73">ceiling above</text>
+        <text class="g-note" x="236" y="86">the landing</text>
+        <Dim a={[100, 88]} b={[100, 132]} l="A" />
+        <Dim a={[170, 112]} b={[226, 112]} l="H" />
+        <Dim a={[212, 22]} b={[212, 96]} l="I" />
+      </Frame>
+    </>
+  ),
+  room: () => (
+    <Frame label="Room seen from the side: A is floor to ceiling at the lowest point, where the item will be tipped upright">
+      <rect class="g-wall" x="0" y="0" width="300" height="150" />
+      <rect class="g-open" x="30" y="16" width="240" height="118" />
+      <rect class="g-obj" x="70" y="104" width="110" height="30" />
+      <rect class="g-obj" x="70" y="24" width="30" height="110" opacity="0.35" />
+      <path class="g-path" d="M180 104 A114 114 0 0 0 100 24" />
+      <text class="g-note" x="190" y="124">carried in on its back</text>
+      <text class="g-note" x="108" y="40">tipped upright</text>
+      <Dim a={[236, 16]} b={[236, 134]} l="A" />
     </Frame>
   ),
   lift: () => (

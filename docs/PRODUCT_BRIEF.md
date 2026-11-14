@@ -17,7 +17,8 @@ Let a customer find out, before they buy, whether an item can be carried from th
 | Platform | Web link, nothing to install |
 | Who and when | The customer, before buying |
 | What is checked | The full delivery route, front door to room |
-| On "tight" or "won't fit" | Show the result and the problem spot; the customer decides |
+| Close calls | A distinct "needs checking" verdict that sends the customer to the delivery team |
+| Item handling | Checked as delivered: crews do not remove parts or lift over banisters |
 
 ## Users
 
@@ -26,9 +27,22 @@ Let a customer find out, before they buy, whether an item can be carried from th
 
 ## How it works
 
-1. **Item.** Width, depth and height in cm. Typed in for now; a product page can prefill them through the link (`?name=&w=&d=&h=&upright=1`), which is the hook for the catalogue. A "must stay upright" switch covers items that cannot be turned over.
-2. **Route.** The customer adds each tight spot in order: doorway, hallway, corner turn, straight stairs, stair turn / landing, lift. Each has two to five measurements and a one-line tip on how to measure it properly.
-3. **Verdict.** Every step gets *Fits*, *Tight* (under 5 cm to spare) or *Won't fit*, the clearance in cm, how the item has to be carried to get through, and a small diagram of the item at the tightest point. The overall verdict is the worst step, named.
+1. **Item.** Width, depth and height in cm, typed in. If the item is delivered in sections, the customer enters the largest section. A product page can prefill the item through the link (`?name=&w=&d=&h=&sections=1`), which is the hook for the catalogue.
+2. **Route.** The customer adds each tight spot in order: doorway, hallway, corner turn, straight stairs, stairs with a quarter-turn landing, stairs with a half-turn landing, lift, and the room the item is going in. Each has a labelled picture showing where to measure.
+3. **Verdict.** Every step gets one of three verdicts, and the overall verdict is the worst step, named:
+   - **Fits**: there is a way to carry it through with room to spare.
+   - **Needs checking**: too close to call. The customer is asked to contact the delivery team before ordering.
+   - **Won't fit**: no way of carrying it gets through.
+
+The tool is aimed at large rigid items (wardrobes, larders, cupboards). The item is checked exactly as delivered: a solid block, carried any way up, with nothing removed.
+
+### What each check does
+
+- **Doorway / hallway:** the item's cross-section against the clear opening, including on the diagonal.
+- **Corner:** the item pivoted round a right-angle turn between two passage widths, tipped or stood on end if the ceiling allows.
+- **Stairs:** a step-by-step simulation of the block being carried through the whole staircase: getting onto the stairs (straight on or from the side), up each flight under the ceiling, turning on a landing, and getting off at the top (straight on or with a turn). The search finds an actual collision-free sequence of positions and tilts, or reports the stage where the item gets stuck. An independent brute-force test confirms that every path it accepts is clear of walls, steps and ceilings.
+- **Room:** whether a tall item carried in on its back can be tipped upright under the ceiling, and if not, whether the route lets it stay upright all the way.
+- **Lift:** door opening, then the inside of the car.
 
 ### Guarding against wrong measurements
 
@@ -54,13 +68,15 @@ The item is treated as a solid block. For each step the engine tries every way t
 - **Straight stairs:** cross-section against stair width and the headroom measured square to the slope.
 - **Lift:** door opening, then the inside of the car, including corner-to-corner and leant back.
 
-## Known limits of v1
+## Known limits of the prototype
 
-- A block is slightly pessimistic for shaped items (sofa arms, legs), so some real fits will show as tight. That is the safe direction.
-- Not modelled: removing legs, doors or banisters; lifting over an open banister; hooking a sofa through a doorway; curved or winder stairs; the top and bottom of a staircase (add a corner step for those).
+- Results are only as good as the measurements typed in.
+- Stairs are simplified: risers are assumed to be 20 cm, steps are treated as a ramp through their front edges, and newel posts, winder steps and curved stairs are not modelled. The "needs checking" band is wider on stairs for this reason.
 - Only 90-degree turns.
+- Not modelled, because crews do not do them: removing doors or parts, lifting over a banister.
 - Centimetres only.
-- The AR placement and camera tape measure have not yet been tested on physical phones.
+- The AR placement has been tried on one iPhone; the Android camera tape measure has not been tested on a physical phone.
+- The "normal range" warnings and the size of the "needs checking" band are estimates, to be calibrated against real delivery outcomes.
 
 ## Success measures
 
@@ -73,7 +89,7 @@ The item is treated as a solid block. For each step the engine tries every way t
 
 1. Device testing on a range of iPhones and Android phones.
 2. Catalogue integration: a "Will it fit?" button on each product page that passes dimensions (packaged, and with legs removed where applicable).
-3. Calibrate the 5 cm "tight" margin against real delivery outcomes.
+3. Calibrate the "needs checking" band against real delivery outcomes.
 4. Save and share a result, so it can be attached to an order and seen by the delivery crew.
 5. Fix suggestions (remove legs, alternative route, smaller variant) and a specialist-delivery flag.
 6. Inches, non-90-degree turns, winder stairs.

@@ -8,6 +8,14 @@ export async function loadViewer(): Promise<void> {
   await import('@google/model-viewer');
 }
 
+/** Fetches the 3D libraries ahead of time so the preview opens without a network connection. */
+export function warm(): void {
+  loadViewer().catch(() => {});
+  import('three').catch(() => {});
+  import('three/examples/jsm/exporters/GLTFExporter.js').catch(() => {});
+  import('three/examples/jsm/utils/BufferGeometryUtils.js').catch(() => {});
+}
+
 /** Returns a blob URL for a GLB box of the given size (cm), sitting on the floor. */
 export async function buildBoxModel(dims: Dims): Promise<string> {
   const THREE = await import('three');

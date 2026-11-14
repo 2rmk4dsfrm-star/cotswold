@@ -7,7 +7,7 @@ const seg = (kind: Segment['kind'], v: Segment['v']): Segment => ({ id: kind, ki
 describe('sanity checks', () => {
   it('stays quiet for ordinary measurements', () => {
     expect(segmentWarnings(seg('door', { width: 76, height: 198 }))).toEqual([]);
-    expect(segmentWarnings(seg('stairs', { width: 85, headroom: 200, pitch: 40 }))).toEqual([]);
+    expect(segmentWarnings(seg('stairsStraight', { width: 85, headroom: 200, pitch: 40, steps: 13 }))).toEqual([]);
     expect(segmentWarnings(seg('corner', { widthIn: 90, widthOut: null, height: 240 }))).toEqual([]);
   });
 
@@ -26,8 +26,13 @@ describe('sanity checks', () => {
   });
 
   it('questions stairwell-height headroom and odd pitches', () => {
-    expect(segmentWarnings(seg('stairs', { width: 85, headroom: 300, pitch: 40 }))[0].key).toBe('headroom');
-    expect(segmentWarnings(seg('stairs', { width: 85, headroom: 200, pitch: 70 }))[0].fix?.value).toBe(40);
+    expect(segmentWarnings(seg('stairsStraight', { width: 85, headroom: 300, pitch: 40 }))[0].key).toBe('headroom');
+    expect(segmentWarnings(seg('stairsStraight', { width: 85, headroom: 200, pitch: 70 }))[0].fix?.value).toBe(40);
+  });
+
+  it('questions step counts and narrow half-landings', () => {
+    expect(segmentWarnings(seg('stairsStraight', { steps: 40 }))[0].key).toBe('steps');
+    expect(segmentWarnings(seg('stairsHalf', { width: 90, landWidth: 150 }))[0].key).toBe('landWidth');
   });
 
   it('checks the item too', () => {
