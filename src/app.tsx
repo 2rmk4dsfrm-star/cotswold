@@ -317,9 +317,15 @@ function ArPreview({ item, onClose }: { item: Item; onClose: () => void }) {
           ))}
         </div>
       )}
+      <ol class="note steps">
+        <li>Stand 2–3 m back from where the item will go and tap <b>View in my space</b>.</li>
+        <li>Point the phone at the floor there and move it slowly side to side. The block floats close to you at first, then drops onto the floor once your phone has found it.</li>
+        <li>Drag with one finger to move it and twist with two fingers to turn it.</li>
+        <li>The stripes round the base are 10 cm each — hold a tape measure against them to check the size is true.</li>
+      </ol>
       <p class="note">
-        On a phone, tap <b>View in my space</b> to stand a full-size block in the room, doorway or stairwell. If the
-        button doesn't appear, your browser doesn't support AR — the fit check below still works from measurements.
+        The block is drawn in front of real furniture and walls, so judge the fit by where its base meets the floor.
+        No button? Your browser doesn't support AR; the fit check still works from measurements.
       </p>
     </div>
   );

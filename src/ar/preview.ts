@@ -12,21 +12,38 @@ export async function loadViewer(): Promise<void> {
 export async function buildBoxModel(dims: Dims): Promise<string> {
   const THREE = await import('three');
   const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
+  const { mergeGeometries } = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
   const [w, d, h] = dims.map((c) => c / 100);
   const scene = new THREE.Scene();
+  // Solid, not see-through: AR viewers ground and shade an opaque object far more convincingly.
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshStandardMaterial({ color: 0xb98a5e, roughness: 0.7, metalness: 0, transparent: true, opacity: 0.82 }),
+    new THREE.MeshStandardMaterial({ color: 0xb98a5e, roughness: 0.75, metalness: 0 }),
   );
   body.position.y = h / 2;
   scene.add(body);
-  // A darker band round the base makes the footprint easy to read against a floor.
-  const band = new THREE.Mesh(
-    new THREE.BoxGeometry(w * 1.002, Math.min(0.04, h / 4), d * 1.002),
-    new THREE.MeshStandardMaterial({ color: 0x24362e, roughness: 0.8 }),
-  );
-  band.position.y = Math.min(0.02, h / 8);
-  scene.add(band);
+
+  // A ruler band round the base in alternating 10 cm stripes, so the size can be
+  // checked against a tape measure and the footprint reads clearly on the floor.
+  const STRIPE = 0.1;
+  const bandH = Math.min(0.05, h / 4);
+  const skin = 0.004;
+  const dark: any[] = [];
+  const light: any[] = [];
+  const run = (length: number, place: (g: InstanceType<typeof THREE.BoxGeometry>, centre: number, len: number) => void) => {
+    for (let i = 0, start = 0; start < length - 1e-6; i++, start += STRIPE) {
+      const len = Math.min(STRIPE, length - start);
+      const g = new THREE.BoxGeometry(1, 1, 1);
+      place(g, -length / 2 + start + len / 2, len);
+      (i % 2 ? light : dark).push(g);
+    }
+  };
+  for (const side of [-1, 1]) {
+    run(w, (g, c, len) => g.scale(len, bandH, skin).translate(c, bandH / 2, side * (d / 2 + skin / 2)));
+    run(d, (g, c, len) => g.scale(skin, bandH, len).translate(side * (w / 2 + skin / 2), bandH / 2, c));
+  }
+  scene.add(new THREE.Mesh(mergeGeometries(dark), new THREE.MeshStandardMaterial({ color: 0x24362e, roughness: 0.8 })));
+  scene.add(new THREE.Mesh(mergeGeometries(light), new THREE.MeshStandardMaterial({ color: 0xf4f0e8, roughness: 0.8 })));
   const glb = (await new GLTFExporter().parseAsync(scene, { binary: true })) as ArrayBuffer;
   return URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' }));
 }
